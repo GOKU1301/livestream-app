@@ -20,14 +20,6 @@ echo ""
 echo "🐍 Setting up Backend (Flask)..."
 cd backend
 
-if [ ! -d "venv" ]; then
-    echo "Creating virtual environment..."
-    python3 -m venv venv
-fi
-
-echo "Activating virtual environment..."
-source venv/bin/activate
-
 echo "Installing Python dependencies..."
 pip install -r requirements.txt
 
@@ -61,3 +53,23 @@ echo ""
 echo "📖 Documentation:"
 echo "   - User Guide: docs/User_Guide.md"
 echo "   - API Docs:   docs/API_Documentation.md"
+
+# FFmpeg Setup Guide
+
+## Overview
+FFmpeg is required for converting RTSP streams to HLS format for browser playback.
+
+## Installation
+
+### Windows
+1. Download FFmpeg from https://www.gyan.dev/ffmpeg/builds/
+2. Extract the archive
+3. Add FFmpeg to system PATH:
+   - Right-click Computer > Properties > Advanced System Settings
+   - Environment Variables > System Variables
+   - Edit Path > Add path to ffmpeg/bin folder
+
+### macOS
+```bash
+# Using Homebrew
+brew install ffmpeg

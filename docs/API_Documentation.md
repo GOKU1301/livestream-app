@@ -18,22 +18,7 @@ All requests should use `Content-Type: application/json` for POST and PUT reques
 
 ## Endpoints
 
-### 1. Health Check
-
-#### GET /
-Check if the API is running.
-
-**Response:**
-```json
-{
-  "message": "Livestream App API",
-  "status": "running"
-}
-```
-
----
-
-### 2. Overlay Management
+### 1. Overlay Management
 
 #### GET /api/overlays
 Retrieve all overlay settings.
@@ -132,6 +117,7 @@ Create a new overlay setting.
   }
 }
 ```
+
 
 #### GET /api/overlays/{overlay_id}
 Retrieve a specific overlay by ID.

@@ -17,7 +17,7 @@ The Livestream App allows you to view RTSP video streams with custom overlays. Y
 ## Getting Started
 
 ### Prerequisites
-- **Backend**: Python 3.7+, MongoDB
+- **Backend**: Python 3.7+, MongoDB Atlas
 - **Frontend**: Node.js 14+, npm or yarn
 - **Browser**: Modern browser with HTML5 video support
 

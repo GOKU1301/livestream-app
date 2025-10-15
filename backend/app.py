@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, url_for
 from flask_cors import CORS
 from pymongo import MongoClient
 from pymongo.errors import ConnectionFailure
@@ -6,8 +6,10 @@ from bson import ObjectId
 import os
 import sys
 from dotenv import load_dotenv
-from datetime import datetime
+from datetime import datetime, UTC
 from flask.json.provider import DefaultJSONProvider
+from rtsp_handler import RTSPHandler
+import subprocess
 
 # Load environment variables
 load_dotenv()
@@ -100,8 +102,8 @@ def create_overlay():
             },
             "style": data.get('style', {}),  # Additional styling options
             "visible": data.get('visible', True),
-            "created_at": datetime.utcnow(),
-            "updated_at": datetime.utcnow()
+            "created_at": datetime.now(UTC),
+            "updated_at": datetime.now(UTC)
         }
         
         result = overlays_collection.insert_one(overlay)
@@ -137,7 +139,7 @@ def update_overlay(overlay_id):
             if field in data:
                 update_data[field] = data[field]
         
-        update_data['updated_at'] = datetime.utcnow()
+        update_data['updated_at'] = datetime.now(UTC)
         
         result = overlays_collection.update_one(
             {"_id": ObjectId(overlay_id)},
@@ -183,7 +185,7 @@ def update_settings():
         
         settings = {
             "rtsp_url": data.get('rtsp_url', ''),
-            "updated_at": datetime.utcnow()
+            "updated_at": datetime.now(UTC)
         }
         
         db.settings.replace_one({}, settings, upsert=True)
@@ -191,6 +193,64 @@ def update_settings():
         return jsonify({"success": True, "data": settings}), 200
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
+
+@app.route('/api/stream', methods=['POST'])
+def start_stream():
+    """Handle both RTSP and MP4 streams"""
+    try:
+        data = request.get_json()
+        url = data.get('url')
+        
+        if not url:
+            return jsonify({"success": False, "error": "No URL provided"}), 400
+            
+        if url.startswith('rtsp://'):
+            ffmpeg_path = os.getenv('FFMPEG_PATH')
+            if not ffmpeg_path:
+                return jsonify({
+                    "success": False, 
+                    "error": "FFMPEG_PATH not set in environment variables"
+                }), 500
+                
+            try:
+                # Check FFmpeg installa1tion
+                subprocess.run([ffmpeg_path, '-version'], 
+                             capture_output=True,
+                             creationflags=subprocess.CREATE_NO_WINDOW)
+            except FileNotFoundError:
+                return jsonify({
+                    "success": False, 
+                    "error": f"FFmpeg not found at path: {ffmpeg_path}"
+                }), 500
+            
+            handler = RTSPHandler()
+            if handler.convert_to_hls(url):
+                # Build an absolute URL to the generated HLS manifest so the
+                # frontend (running on a different dev server) requests the
+                # file from this Flask backend instead of the React dev server.
+                manifest_path = 'streams/stream.m3u8'
+                stream_url = url_for('static', filename=manifest_path, _external=True)
+                return jsonify({
+                    "success": True,
+                    "stream_url": stream_url,
+                    "type": "hls"
+                })
+            else:
+                return jsonify({
+                    "success": False,
+                    "error": "Stream conversion failed"
+                }), 500
+        else:
+            return jsonify({
+                "success": True,
+                "stream_url": url,
+                "type": "mp4"
+            })
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+# Add static file serving
+app.static_folder = 'static'
 
 if __name__ == '__main__':
     port = int(os.getenv('PORT', 5000))

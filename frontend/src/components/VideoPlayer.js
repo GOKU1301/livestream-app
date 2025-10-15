@@ -1,19 +1,80 @@
-import React, { useRef, useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
+import Hls from 'hls.js';
 import DraggableOverlay from './DraggableOverlay';
+import '../styles/VideoPlayer.css';
 
 const VideoPlayer = ({ rtspUrl, overlays, isPlaying, setIsPlaying, onOverlayUpdate }) => {
   const videoRef = useRef(null);
+  const hlsRef = useRef(null);
   const containerRef = useRef(null);
   const [volume, setVolume] = useState(1);
   const [error, setError] = useState('');
 
   useEffect(() => {
-    if (videoRef.current && rtspUrl) {
-      // For RTSP streams, we need to convert them to a format browsers can handle
-      // In a real implementation, you'd use a media server like Node Media Server
-      // For demo purposes, we'll show how to handle video URLs
-      videoRef.current.src = rtspUrl;
+    if (!rtspUrl) return;
+
+    // Clean up previous HLS instance
+    if (hlsRef.current) {
+      hlsRef.current.destroy();
     }
+
+    // Request stream URL from backend
+    fetch('/api/stream', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ url: rtspUrl }),
+    })
+      .then((response) => response.json())
+      .then((data) => {
+        if (!data.success) {
+          console.error('Stream error:', data.error);
+          return;
+        }
+
+        const videoElement = videoRef.current;
+
+        if (data.type === 'hls') {
+          // Handle RTSP streams converted to HLS
+          if (Hls.isSupported()) {
+            const hls = new Hls({
+              debug: false,
+              enableWorker: true,
+              lowLatencyMode: true,
+            });
+
+            hls.loadSource(data.stream_url);
+            hls.attachMedia(videoElement);
+            hlsRef.current = hls;
+
+            hls.on(Hls.Events.MANIFEST_PARSED, () => {
+              videoElement.play().catch((e) => console.log('Playback failed:', e));
+            });
+
+            hls.on(Hls.Events.ERROR, (event, data) => {
+              console.error('HLS error:', data);
+            });
+          } else {
+            console.error('HLS is not supported in this browser');
+          }
+        } else {
+          // Handle direct MP4 playback
+          videoElement.src = data.stream_url;
+          videoElement.play().catch((e) => console.log('Playback failed:', e));
+        }
+      })
+      .catch((error) => {
+        console.error('Failed to fetch stream URL:', error);
+      });
+
+    // Cleanup function
+    return () => {
+      if (hlsRef.current) {
+        hlsRef.current.destroy();
+        hlsRef.current = null;
+      }
+    };
   }, [rtspUrl]);
 
   const handlePlay = () => {
@@ -72,7 +133,6 @@ const VideoPlayer = ({ rtspUrl, overlays, isPlaying, setIsPlaying, onOverlayUpda
               Your browser does not support the video tag.
             </video>
             
-            {/* Render overlays */}
             {overlays.filter(overlay => overlay.visible).map((overlay) => (
               <DraggableOverlay
                 key={overlay._id}
@@ -88,48 +148,44 @@ const VideoPlayer = ({ rtspUrl, overlays, isPlaying, setIsPlaying, onOverlayUpda
             ))}
           </>
         ) : (
-          <div style={{ color: 'white', textAlign: 'center' }}>
+          <div className="video-placeholder">
+            <i className="fas fa-video"></i>
             <h3>No RTSP URL configured</h3>
             <p>Please enter an RTSP URL in the settings below</p>
           </div>
         )}
         
         {error && (
-          <div style={{ 
-            position: 'absolute', 
-            top: '10px', 
-            left: '10px', 
-            right: '10px',
-            background: 'rgba(231, 76, 60, 0.9)', 
-            color: 'white', 
-            padding: '10px', 
-            borderRadius: '4px' 
-          }}>
+          <div className="error-message">
             {error}
           </div>
         )}
       </div>
 
-      <div className="controls">
+      <div className="controls-panel">
         <h3>Video Controls</h3>
-        <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
-          <button 
-            className="btn btn-success" 
-            onClick={handlePlay}
-            disabled={!rtspUrl}
-          >
-            ▶️ Play
-          </button>
-          <button 
-            className="btn" 
-            onClick={handlePause}
-            disabled={!rtspUrl}
-          >
-            ⏸️ Pause
-          </button>
+        <div className="controls-container">
+          <div className="playback-controls">
+            <button 
+              className={`control-btn play-btn ${!rtspUrl ? 'disabled' : ''}`}
+              onClick={handlePlay}
+              disabled={!rtspUrl}
+            >
+              <i className="fas fa-play"></i>
+              <span>Play</span>
+            </button>
+            <button 
+              className={`control-btn pause-btn ${!rtspUrl ? 'disabled' : ''}`}
+              onClick={handlePause}
+              disabled={!rtspUrl}
+            >
+              <i className="fas fa-pause"></i>
+              <span>Pause</span>
+            </button>
+          </div>
           
-          <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-            <label>🔊 Volume:</label>
+          <div className="volume-control">
+            <i className="fas fa-volume-up"></i>
             <input
               type="range"
               min="0"
@@ -137,16 +193,18 @@ const VideoPlayer = ({ rtspUrl, overlays, isPlaying, setIsPlaying, onOverlayUpda
               step="0.1"
               value={volume}
               onChange={handleVolumeChange}
-              style={{ width: '100px' }}
+              className="volume-slider"
             />
-            <span>{Math.round(volume * 100)}%</span>
+            <span className="volume-value">{Math.round(volume * 100)}%</span>
           </div>
         </div>
         
-        <div style={{ marginTop: '10px', fontSize: '14px', color: '#666' }}>
-          <strong>Note:</strong> RTSP streams require a media server (like Node Media Server) to convert 
-          the stream to a browser-compatible format (HLS/DASH). For testing, you can use MP4 URLs 
-          or set up a media server.
+        <div className="info-note">
+          <i className="fas fa-info-circle"></i>
+          <span>
+            RTSP streams require a media server (like Node Media Server) to convert 
+            the stream to a browser-compatible format (HLS/DASH).
+          </span>
         </div>
       </div>
     </div>
